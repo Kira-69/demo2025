@@ -678,15 +678,15 @@
 
 - **На BR-RTR (для сервиса wiki):**
   ```bash
-  ip nat destination static tcp 192.168.1.2 80 192.168.1.2 8080
+  ip nat destination static tcp 192.168.3.2 80 192.168.3.2 8080
   ```
 - **На HQ-RTR (для сервиса SSH на HQ-SRV):**
   ```bash
-  ip nat destination static tcp 192.168.0.2 2024 192.168.0.2 2024
+  ip nat destination static tcp 192.168.1.2 2024 192.168.1.2 2024
   ```
 - **На BR-RTR (для сервиса SSH на BR-SRV):**
   ```bash
-  ip nat destination static tcp 192.168.1.2 2024 192.168.1.2 2024
+  ip nat destination static tcp 192.168.3.2 2024 192.168.3.2 2024
   ```
 
 ---
@@ -713,7 +713,7 @@
     en
     conf t
     filter-map policy ipv4 moodle 1
-      match 80 172.16.4.1/28 192.168.0.2/26 dscp 0
+      match 80 172.16.4.1/28 192.168.1.2/26 dscp 0
       set redirect hq-rtr.moodle.au-team.irpo
     end
     wr mem
