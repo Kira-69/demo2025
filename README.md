@@ -268,7 +268,9 @@
   router ospf 1
     ospf router-id 172.16.0.1
     network 172.16.0.0 0.0.0.3 area 0
-    network 192.168.0.0 0.0.0. area 0
+    network 192.168.0.0 0.0.0.255 area 0
+    network 192.168.1.0 0.0.0.63 area 0
+    network 192.168.2.0 0.0.0.15 area 0
     passive-interface default
     no passive-interface tunnel.1
   ```
@@ -276,16 +278,16 @@
 - **На BR-RTR:**
   ```bash
   interface tunnel.1
-  ip add 10.0.0.2/30
+  ip add 172.16.0.2/30
   ip ospf mtu-ignore
   ip ospf network broadcast
   ip tunnel 172.16.5.2 172.16.4.2 mode gre
   exit
   conf t
   router ospf 1
-    ospf router-id 10.0.0.2
+    ospf router-id 172.16.0.2
     network 10.0.0.0 0.0.0.3 area 0
-    network 192.168.1.0 0.0.0.31 area 0
+    network 192.168.3.0 0.0.0.31 area 0
     passive-interface default
     no passive-interface tunnel.1
   ```
@@ -303,7 +305,8 @@
   **На HQ-RTR:**
   ```bash
   router ospf 1
-    area 0 authentication ex
+    area 0 authentication
+    ex
   interface tunnel.1
     ip ospf authentication-key ecorouter
   wr mem
@@ -312,7 +315,8 @@
   **На BR-RTR:**
   ```bash
   router ospf 1
-    area 0 authentication ex
+    area 0 authentication
+    ex
   interface tunnel.1
     ip ospf authentication-key ecorouter
   wr mem
@@ -326,12 +330,16 @@
 
 - **На EcoRouter HQ-RTR:**
   ```bash
-  ip nat pool OVER 192.168.0.2-192.168.0.254
-  ip nat source dynamic inside-to-outside pool OVER overload interface ISP
+  ip nat pool nat1 192.168.0.2-192.168.0.6
+  ip nat source dynamic inside-to-outside pool nat1 overload interface ISP
+  ip nat pool nat1 192.168.1.2-192.168.1.64
+  ip nat source dynamic inside-to-outside pool nat1 overload interface ISP
+  ip nat pool nat1 192.168.2.2-192.168.2.16
+  ip nat source dynamic inside-to-outside pool nat1 overload interface ISP
   ```
 - **На EcoRouter BR-RTR:**
   ```bash
-  ip nat pool nat3 192.168.1.2-192.168.1.31
+  ip nat pool nat3 192.168.3.2-192.168.3.31
   ip nat source dynamic inside-to-outside pool nat3 overload interface ISP
   ```
 
@@ -367,8 +375,8 @@
   ```
 
 - **Настройка шлюзов на серверах:**
-  - **HQ-SRV:** Шлюз – `192.168.0.1/26`
-  - **BR-SRV:** Шлюз – `192.168.1.1/27`
+  - **HQ-SRV:** Шлюз – `192.168.1.1/26`
+  - **BR-SRV:** Шлюз – `192.168.3.1/27`
 
 ---
 
@@ -376,15 +384,15 @@
 
 - **Для офиса HQ (на HQ-RTR):**
   ```bash
-  ip pool dhcpHQ 192.168.0.66-192.168.0.78
+  ip pool dhcpHQ 192.168.2.2-192.168.2.16
   en
   conf t
   dhcp-server 1
     pool dhcpHQ 1
       domain-name au-team.irpo
       mask 255.255.255.240
-      gateway 192.168.0.65
-      dns 192.168.0.2
+      gateway 192.168.2.1
+      dns 192.168.1.2
   exit
   wr mem
   ```
@@ -432,17 +440,17 @@
             IN      NS      @
             IN      A       127.0.0.1
     hq-rtr  IN      A       192.168.0.1
-    br-rtr  IN      A       192.168.1.1
-    hq-srv  IN      A       192.168.0.2
-    hq-cli  IN      A       192.168.0.66
-    br-srv  IN      A       192.168.1.2
+    br-rtr  IN      A       192.168.3.1
+    hq-srv  IN      A       192.168.1.2
+    hq-cli  IN      A       192.168.2.2
+    br-srv  IN      A       192.168.3.2
     moodle  IN      CNAME   hq-rtr
     wiki    IN      CNAME   hq-rtr
     _ldap._tcp   IN   SRV   0   100   389   br-srv.au-team.irpo.
     _kerberos   IN   SRV   0 100 88   br-srv.au-team.irpo.
     _kerberos   IN   TXT   "AU-TEAM.IRPO"
     ```
-  - Пример файла зоны `0.168.192.zone`:
+  - Пример файла зоны `168.192.zone`:
     ```zone
     $TTL    1D
     @       IN      SOA     au-team.irpo. root.au-team.irpo. (
@@ -452,9 +460,9 @@
                               1W         ; expire
                               3H )       ; minimum
             IN      NS      @
-    1       IN      PTR     hq-rtr.au-team.irpo.
-    2       IN      PTR     hq-srv.au-team.irpo.
-    66      IN      PTR     hq-cli.au-team.irpo.
+    1.0     IN      PTR     hq-rtr.au-team.irpo.
+    2.1     IN      PTR     hq-srv.au-team.irpo.
+    2.2     IN      PTR     hq-cli.au-team.irpo.
     ```
 - **Запуск сервиса:**
   ```bash
@@ -463,7 +471,7 @@
   ```
 
 - **Настройка клиентов:**  
-  На HQ-CLI и HQ-RTR установить DNS-сервер: `192.168.0.2` (при необходимости удалить `8.8.8.8`).
+  На HQ-CLI и HQ-RTR установить DNS-сервер: `192.168.1.2` (при необходимости удалить `8.8.8.8`).
 
 - **Таблица записей (см. Таблицу 2 в исходном файле):**
   | Устройство | Запись                   | Тип    |
@@ -502,7 +510,7 @@
   nano /etc/selinux/config  # замените режим с enforcing на permissive
   ```
 - Настройка сети через `nmtui`:  
-  - Добавьте второй DNS-сервер: `192.168.0.1/26`  
+  - Добавьте второй DNS-сервер: `192.168.1.1/26`  
   - Укажите домен поиска: `au-team.irpo`  
   - Перезапустите сетевой интерфейс.
 
