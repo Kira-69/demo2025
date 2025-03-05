@@ -166,7 +166,7 @@
 - **На HQ-RTR:**
   ```bash
   int te1.999
-  ip add 192.168.0.81/29
+  ip add 192.168.0.1/29
   description toSW
   port te1
   service-instance toSW
@@ -182,7 +182,7 @@
   ovs-vsctl add-port ovs0 ens3
   ovs-vsctl set port ens3 vlan_mode=native-untagged tag=999 trunks=999,100,200
   ovs-vsctl add-port ovs0 ovs0-vlan999 tag=999 -- set Interface ovs0-vlan999 type=internal
-  ifconfig ovs0-vlan999 inet 192.168.0.82/29 up
+  ifconfig ovs0-vlan999 inet 192.168.0.2/29 up
   ```
 
 #### Настройка VLAN для серверов и клиентов
@@ -191,7 +191,7 @@
   - **На HQ-RTR:**
     ```bash
     int te1.100
-    ip add 192.168.0.1/26
+    ip add 192.168.1.1/26
     port te1
     service-instance te1.100
     encapsulation dot1q 100 exact
@@ -211,7 +211,7 @@
   - **На HQ-RTR:**
     ```bash
     int te1.200
-    ip add 192.168.0.65/28
+    ip add 192.168.2.1/28
     port te1
     service-instance te1.200
     encapsulation dot1q 200 exact
@@ -259,16 +259,16 @@
 - **На HQ-RTR:**
   ```bash
   interface tunnel.1
-  ip add 10.0.0.1/30
+  ip add 172.16.0.1/30
   ip ospf network broadcast
   ip ospf mtu-ignore
   ip tunnel 172.16.4.2 172.16.5.2 mode gre
   exit
   conf t
   router ospf 1
-    ospf router-id 10.0.0.1
-    network 10.0.0.0 0.0.0.3 area 0
-    network 192.168.0.0 0.0.0.255 area 0
+    ospf router-id 172.16.0.1
+    network 172.16.0.0 0.0.0.3 area 0
+    network 192.168.0.0 0.0.0. area 0
     passive-interface default
     no passive-interface tunnel.1
   ```
