@@ -565,18 +565,54 @@
 
 ---
 
-### 2. Настройка файлового хранилища
-
-- Используя три дополнительных диска (1 Гб каждый) на HQ-SRV:
-  - Создайте RAID 5 массив с именем `md0`.  
-  - Конфигурация массива должна сохраняться в `/etc/mdadm.conf`.
-  - Автоматически монтируйте массив в папку `/raid5`.
-  - Создайте раздел, отформатируйте его в `ext4`.
-- **Настройка NFS-сервера:**
-  - Экспортируйте папку `/raid5/nfs` с правами чтения и записи для сети HQ-CLI.
-  - На HQ-CLI настройте автомонтирование в `/mnt/nfs`.
-
-> **Отчёт:** Основные параметры сервера укажите в отчёте.
+### 2. Сконфигурируйте файловое хранилище:
+ ### Настройка проивзодится на HQ-SRV:
+  Перед тем как начать проверяем, что установлены следюущие пакеты
+  dnf isntall mdadm nfs-utils -y
+## •	При помощи трёх дополнительных дисков, размером 1Гб каждый, на HQ-SRV сконфигурируйте дисковый массив уровня 5  
+    mdadm --create --verbose /dev/md0 --level=5 --raid-devices=3 /dev/sdb /dev/sdc /dev/sdd     
+ ![mdadmcreate](https://github.com/dizzamer/DEMO2025/blob/main/mdadm_create.png)    
+ ![mdaddetail](https://github.com/dizzamer/DEMO2025/blob/main/mdadm_detail.png)  
+## •	Имя устройства – md0, конфигурация массива размещается в файле /etc/mdadm.conf  
+    mdadm --detail --scan >> /etc/mdadm.conf      
+ ## •	Обеспечьте автоматическое монтирование в папку /raid5  
+    Добавляем в /etc/fstab:    
+    nano /etc/fstab  
+    /dev/md0 /raid5 ext4 defaults 0 0  
+![fstab](https://github.com/dizzamer/DEMO2025/blob/main/fstab.png)  
+ ## •	Создайте раздел, отформатируйте раздел, в качестве файловой системы используйте ext4  
+     mkfs.ext4 /dev/md0  
+   ![mkfs](https://github.com/dizzamer/DEMO2025/blob/main/mkfs.png)   
+ ## •	Создаем точку монтирования и примонтируемся     
+    mkdir -p /raid5   
+    mount -a   
+  ![mount](https://github.com/dizzamer/DEMO2025/blob/main/mount.png)   
+ ### •	Настройте сервер сетевой файловой системы(nfs), в качестве папки общего доступа выберите /raid5/nfs, доступ для чтения и записи для всей сети в сторону HQ-CLI   
+  ## •	Создаем папку для NFS  
+    mkdir -p /raid5/nfs  
+    chmod 777 /raid5/nfs  
+ ![mkdir_nfs](https://github.com/dizzamer/DEMO2025/blob/main/mkdir_nfs.png)  
+ ## Настройка экспорта  
+    Добавляем в /etc/exports:  
+    nano /etc/exports  
+    /raid5/nfs 192.168.1.64/28(rw,sync,insecure,nohide,all_squash,no_subtree_check)
+![exports](https://github.com/dizzamer/DEMO2025/blob/main/etcexports.png)  
+  ## Применяем изменения и перезагружаем службу
+    exportfs -rav  
+    systemctl restart nfs-server  
+ ### Настройка проивзодится на HQ-CLI:
+  ## •	На HQ-CLI настройте автомонтирование в папку /mnt/nfs  
+      Добавляем в /etc/fstab:    
+      nano /etc/fstab  
+      hq-srv:/raid5/nfs /mnt/nfs nfs defaults 0 0
+  ![fstab_hqcli](https://github.com/dizzamer/DEMO2025/blob/main/fstab_hqcli.png)  
+  ## Создаем точку монтирования и примонтируемся  
+    mkdir -p /mnt/nfs  
+    mount -a 
+  ![mountdir_hqcli](https://github.com/dizzamer/DEMO2025/blob/main/nount_cli.png)  
+  ## Проверка монтирования
+      После этого при создании файла на клиенте, он должен появляться и на сервере
+   •	Основные параметры сервера отметьте в отчёте  
 
 ---
 
