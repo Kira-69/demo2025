@@ -622,94 +622,179 @@
   ```bash
   en
   conf t
-  ntp server 172.16.14.1 5
+  ntp server 172.16.14.1
   ntp timezone UTC+3
   end
   wr mem
   ```
-- **Настройка сервера chrony:**  
-  Выберите стратум 5 и настройте клиентов: HQ-SRV, HQ-CLI, BR-RTR, BR-SRV.
-
----
-
-### 4. Настройка Ansible
-
-- **Установка Ansible:**
-  ```bash
-  dnf install ansible -y
-  ```
-- **Файл инвентаря (`/etc/ansible/hosts`):**
-  ```yaml
-  [router] 
-  hq-rtr 
-  br-rtr
-  
-  [linux] 
-  hq-sru 
-  hq-cli
-  
-  [router:vars] 
-  ansible_connection=ansible.netcommon.network_cli 
-  ansible_network_os=community.network.routeros 
-  ansible_user=net_admin 
-  ansible_password=P@ssword
-  
-  [linux:vars] 
-  ansible_user=sshuser 
-  ansible_password=P@ssword
-  ```
-- **Проверка соединения:**
-  ```bash
-  ansible test -m ping
-  ```
-  *(Должен возвращаться ответ `pong` без ошибок.)*
-
----
-
-### 5. Развертывание MediaWiki в Docker
-
-- **Создание файла `wiki.yml` в домашней директории пользователя:**
-  ```yaml
-  services:
-    MediaWiki:
-      container_name: wiki
-      image: mediawiki
-      restart: always
-      ports:
-        - 80:8080
-      links:
-        - database
-      volumes:
-        - images:/var/www/html/images
-        # - ./LocalSettings.php:/var/www/html/LocalSettings.php
-    database:
-      container_name: mariadb
-      image: mariadb
-      environment:
-        MYSQL_DATABASE: mediawiki
-        MYSQL_USER: wiki
-        MYSQL_PASSWORD: WikiP@ssw0rd
-        MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
-      volumes:
-        - dbvolume:/var/lib/mysql
-  volumes:
-    dbvolume:
-      external: true
-    images:
-  ```
-- **Запуск стека контейнеров:**
-  ```bash
-  docker compose -f wiki.yml up -d
-  ```
-- **Дальнейшие действия:**  
-  После установки раскомментируйте строку с `LocalSettings.php` и выполните:
-  ```bash
-  docker-compose -f wiki.yml stop
-  docker-compose -f wiki.yml up -d
-  ```
-
----
-
+•	На HQ-RTR настройте сервер chrony, выберите стратум 5  
+•	В качестве клиентов настройте HQ-SRV, HQ-CLI, BR-RTR, BR-SRV  
+## 4.	Сконфигурируйте ansible на сервере BR-SRV  
+  ### Настройка подключения по ssh BR-RTR | HQ-RTR
+     Настройка производится на HQ-RTR:  
+     en  
+     conf  
+     security-profile 1  
+     rule 1 permit tcp any eq 22 any  
+     end  
+     wr mem  
+     configure
+     ip vrf vrf0  
+     transport input ssh    
+     security 1 vrf vrf0  
+     end  
+     wr mem  
+     conf
+     no security default  
+     Настройка производится на BR-RTR: 
+     conf  
+     security-profile 1  
+     rule 1 permit tcp any eq 22 any  
+     end  
+     wr mem  
+     configure
+     ip vrf vrf0  
+     transport input ssh    
+     security 1 vrf vrf0  
+     end  
+     wr mem  
+     conf
+     no security default
+  ## •	Сформируйте файл инвентаря, в инвентарь должны входить HQ-SRV, HQ-CLI, HQ-RTR и BR-RTR  
+   ### Настройка производится на BR-SRV:  
+    • Рабочий каталог ansible должен располагаться в /etc/ansible  
+      dnf install ansible -y  
+      1) В файле можно прописывать как ip адреса так и имена хостов, сделаем следующим образом.  
+      Так как у нас порт для покдлючения к серверам и клиентам 2024, укажим необходимые переменные для подключения  
+      Для роутера так же указываем переменные, для подключения к роутерам будем использовать пользователя net_admin
+      nano /etc/ansible/inventory.ini  
+      [clients]
+      hq-cli ansible_host=192.168.1.65
+        
+      [servers]
+      hq-srv ansible_host=192.168.0.2
+         
+      [routers]
+      hq-rtr ansible_host=192.168.0.62
+      br-rtr ansible_host=172.16.5.1
+         
+      [clients:vars]
+      ansible_port=2024
+      ansible_user=sshuser
+         
+      [servers:vars]
+      ansible_port=2024
+      ansible_user=sshuser
+ 
+      [routers:vars]
+      ansible_user=net_admin
+      ansible_password=P@$$word
+   ![inventory](https://github.com/dizzamer/DEMO2025/blob/main/inventoryini.png) 
+   ###  Настройка подключения по ключам на BR-SRV
+    2) Подключение к хостам осуществляется по протоколу ssh с помощью rsa ключей.  
+    Для начала переходим в ранее созданно пользователя sshuser командой:
+    su sshuser
+    Сгенерировать серверный ключ можно командой ниже. При её выполнении везде нажмите Enter.
+    ssh-keygen
+    3) Далее нужно распространить ключ на все подключенные хосты.  
+    Распространить ключи на хосты можно командой:  
+    На роутеры ключи пробрасывать не нужно, для них подключение по паролю!
+    ssh-copy-id sshuser@{hq-srv, hq-cli} 
+    где:  
+    sshuser - это пользователь, от имени которого будут выполняться плейбуки;  
+    server - IP-адрес хоста.  
+  ### •	Все указанные машины должны без предупреждений и ошибок отвечать pong на команду ping в ansible посланную с BR-SRV  
+    Пингуем удаленные хосты с помощью Ansible находясь в пользователе sshuser:  
+    ansible -i /etc/ansible/inventory.ini all -m ping 
+    В результате под каждым хостом должно быть написано "ping": "pong".  
+![inventory](https://github.com/dizzamer/DEMO2025/blob/main/ansubleping.png) 
+## 5.	Развертывание приложений в Docker на сервере BR-SRV. 
+    Установка необходимых пакетов:  
+    dnf install docker-ce docker-ce-cli docker-compose -y  
+    systemctl enable docker --now
+    Добавляем текущего пользователя в группу докер, текущий пользователь - student   
+    usermod -aG docker $USER  
+### •	Создайте в домашней директории пользователя файл wiki.yml для приложения MediaWiki.  
+     •	Средствами docker compose должен создаваться стек контейнеров с приложением MediaWiki и базой данных.  
+     •	Используйте два сервиса  
+     •	Основной контейнер MediaWiki должен называться wiki и использовать образ mediawiki  
+     •	Файл LocalSettings.php с корректными настройками должен находиться в домашней папке пользователя и автоматически 
+      монтироваться в образ.  
+     •	Контейнер с базой данных должен называться mariadb и использовать образ mariadb.  
+     •	Он должен создавать базу с названием mediawiki, доступную по стандартному порту, пользователя wiki с паролем   
+     WikiP@ssw0rd должен иметь права доступа к этой базе данных  
+     •	MediaWiki должна быть доступна извне через порт 8080.  
+     Для того, чтобы MediaWiki была доступна извен через порт 8080, нужно в ports сначала указывать 8080  
+     Развертывание производится на сервере BR-SRV:   
+     touch /home/student/wiki.yml  
+     nano /home/student/wiki.yml  
+      services:
+      MediaWiki:
+        container_name: wiki
+        image: mediawiki
+        restart: always
+        ports: 
+          - 8080:80
+        links:
+          - database
+        volumes:
+          - images:/var/www/html/images
+          # - ./LocalSettings.php:/var/www/html/LocalSettings.php
+      database:
+        container_name: mariadb
+        image: mariadb
+        environment:
+          MYSQL_DATABASE: mediawiki
+          MYSQL_USER: wiki
+          MYSQL_PASSWORD: WikiP@ssw0rd
+          MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+        volumes:
+          - dbvolume:/var/lib/mysql
+    volumes:
+      dbvolume:
+          external: true
+      images:
+      Поднимаем стек контейнеров с помощью команды: 
+      docker compose -f wiki.yml up -d  
+ ![wikiyml](https://github.com/dizzamer/DEMO2025/blob/main/wikiyml.png)  
+### Настройка mediawiki после успешного поднятия контейнеров  
+  Переходим по доменному имени или адреса нашего сервера, должны увидеть такую картину:  
+ ![wikistart](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki.png)  
+  Далее настройка выглядит следуюшим образом:  
+  На скриншоте ниже здесь этап проверки всего необходимого для работы MediaWiki, проверка должна пройти успешно  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki2.png)  
+  Далее необходимо указать в хосте базы данных то, как у вас называется контнейнер на сервере, у меня mariadb  
+  Проверить можно зайдя на сервер и выполнить команду docker ps:  
+  ![hostwiki](https://github.com/dizzamer/DEMO2025/blob/main/hostwiki.png)  
+  Указываем, все как по заданию и жмем далее:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki3.png)  
+  Далее будет такое у вас как снизу, жмем далее:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki4.png)  
+  Настройка дальше на скриншоте снизу:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki5.png)  
+  На след скриншоте жмем далее:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki6.png)  
+  Настройка базы данных должна быть выполнена успешно, как на скриншоте ниже:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki77.png)  
+  Далее у вас должен скачаться файл LocalSettings.php автомтаически:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/mediawiki8.png)  
+  Потом переходим в директории загрузки:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/localsettings.png)  
+  Открывем директорию через терминал:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/localsettingsterm.png)  
+  Перекидываем его через scp следующим образом:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/localsettingsterm2.png)  
+  Переходим на сервер и убеждаем, что файл находится рядом с нашим wiki.yml:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/localsettingsterm3.png)  
+  Далее раскоменчиваем строку в файле wiki.yml:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/localsettingswikiyml.png)   
+  Запускаем стек контейнеров командой docker-compose -f wiki.yml up -d    
+  Далее переходим по доменному имени или адреса нашего сервера и наблюдаем вот это:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/wikidemo.png)  
+  Для проверки того, что все получилось входим под админской учеткой Wiki:WikiP@ssw0rd:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/wikidemologin.png)  
+  Должно получиться вот так:  
+  ![wikinext](https://github.com/dizzamer/DEMO2025/blob/main/wikiuser.png)  
 ### 6. Статическая трансляция портов
 
 - **На BR-RTR (для сервиса wiki):**
